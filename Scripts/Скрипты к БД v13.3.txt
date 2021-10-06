@@ -1,0 +1,700 @@
+/*Создание таблицы групп*/
+CREATE TABLE groups_table (
+	id serial PRIMARY KEY,
+	group_name text
+);
+/*Удаление таблицы групп*/
+CREATE FUNCTION drop_table_groups()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+   DROP TABLE groups_table;
+END
+$$;
+/*Удаление всех cтрок в таблице групп*/
+CREATE FUNCTION drop_all_data_table_groups()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;
+	DELETE FROM groups_table;
+
+END
+$$;
+/*Удаление cтроки в таблице групп*/
+CREATE FUNCTION drop_data_table_groups(_name text)
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	/*ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;*/
+	DELETE FROM groups_table WHERE group_name = _name;
+
+END
+$$;
+/*Добавление строк в таблице групп*/
+CREATE FUNCTION add_group(_name text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select group_name From groups_table where group_name = _name)) THEN 
+		RETURN 0; 
+	ELSE 
+		INSERT INTO groups_table (group_name) VALUES (_name);
+		RETURN 1;
+	END IF;
+END
+$$;
+/*Изменение строки в таблице групп*/
+CREATE FUNCTION edit_group(old_name text, new_name text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select group_name From groups_table where group_name = new_name)) THEN 
+		RETURN 0; 
+	ELSE 
+		UPDATE groups_table SET group_name = new_name WHERE group_name = old_name;
+		RETURN 1;
+	END IF;
+END
+$$;
+
+
+
+
+
+
+
+
+
+/*Создание таблицы студентов*/
+CREATE TABLE students_table (
+	id serial PRIMARY KEY,
+	last_name text,
+	first_name text,
+	patronymic text,
+	studentIdCard text,
+	group_id int,
+	height text,
+	FOREIGN KEY (group_id) REFERENCES groups_table (Id) ON DELETE CASCADE
+);
+/*Индекс*/
+CREATE INDEX students_index ON students_table USING btree (studentIdCard DESC);
+/**/
+CREATE FUNCTION set_height() RETURNS trigger
+ LANGUAGE plpgsql
+ AS $$
+BEGIN
+	UPDATE students_table SET height = random()*(210-150)+150 WHERE studentIdCard=
+	NEW.studentIdCard;
+	return new;
+END;
+$$;
+/**/
+CREATE TRIGGER set_height AFTER INSERT ON public.students_table FOR EACH ROW
+WHEN ((pg_trigger_depth() = 0)) EXECUTE PROCEDURE public.set_height();
+
+
+
+/*Удаление таблицы студентов*/
+CREATE FUNCTION drop_table_students()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+   DROP TABLE students_table;
+END
+$$;
+/*Удаление всех cтрок в таблице студентов*/
+CREATE FUNCTION drop_all_data_table_students()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	ALTER SEQUENCE students_table_id_seq RESTART WITH 1;
+	DELETE FROM students_table;
+
+END
+$$;
+/*Удаление cтроки в таблице студентов*/
+CREATE FUNCTION drop_data_table_students(_studentIdCard text)
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	/*ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;*/
+	DELETE FROM students_table WHERE studentIdCard = _studentIdCard;
+
+END
+$$;
+/*Добавление строк в таблице студентов*/
+CREATE FUNCTION add_student(_group_name text, _last_name text,
+							_first_name text, _patronymic text,
+							_studentIdCard text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select last_name, first_name, patronymic, studentIdCard 
+				From students_table where last_name = _last_name AND 
+				first_name = _first_name AND patronymic = _patronymic AND 
+				studentIdCard = _studentIdCard)) THEN
+		RETURN 0; 		
+	ELSE
+		IF(Exists (Select studentIdCard From students_table where 
+				studentIdCard = _studentIdCard)) THEN 
+			RETURN 1;
+		ELSE
+			INSERT INTO students_table(group_id, last_name,
+										first_name, patronymic,
+										studentIdCard) 
+			VALUES ((SELECT id FROM groups_table WHERE group_name = _group_name), 
+					_last_name,
+					_first_name, _patronymic,
+					_studentIdCard);
+			RETURN 2;
+		END IF;
+	END IF;
+END
+$$;
+/*Изменение строки в таблице студентов*/
+CREATE FUNCTION edit_student(old_studentIdCard text, new_group_name text, new_last_name text,
+							new_first_name text, new_patronymic text,
+							new_studentIdCard text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select group_id, last_name, first_name, patronymic, studentIdCard 
+					From students_table where last_name = new_last_name AND 
+					first_name = new_first_name AND patronymic = new_patronymic AND 
+					studentIdCard = new_studentIdCard AND group_id = (SELECT id FROM groups_table WHERE group_name = new_group_name))) THEN
+			RETURN 0; 		
+	ELSE
+		IF (old_studentIdCard != new_studentIdCard) THEN
+			IF(Exists (Select studentIdCard From students_table where 
+					studentIdCard = new_studentIdCard)) THEN 
+				RETURN 1;
+			ELSE
+				UPDATE students_table SET group_id = (SELECT id FROM groups_table WHERE group_name = new_group_name),last_name = new_last_name, 
+				first_name = new_first_name, patronymic = new_patronymic, studentIdCard = new_studentIdCard
+				WHERE studentIdCard = old_studentIdCard;
+				RETURN 2;
+			END IF;
+		ELSE		
+			UPDATE students_table SET group_id = (SELECT id FROM groups_table WHERE group_name = new_group_name),last_name = new_last_name, 
+			first_name = new_first_name, patronymic = new_patronymic, studentIdCard = new_studentIdCard
+			WHERE studentIdCard = old_studentIdCard;
+			RETURN 2;
+		END IF;
+	END IF;
+END
+$$;
+/*
+CREATE TRIGGER log_update
+    AFTER UPDATE ON students_table
+    FOR EACH ROW
+    WHEN (OLD.* IS DISTINCT FROM NEW.*)
+    EXECUTE PROCEDURE log_account_update();
+*/
+
+
+/*Создание таблицы преподавателей*/
+CREATE TABLE lecturers_table (
+	id serial PRIMARY KEY,
+	last_name text,
+	first_name text,
+	patronymic text,
+	lecturer_id_card text
+);
+/*Удаление таблицы преподавателей*/
+CREATE FUNCTION drop_table_lecturers()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+   DROP TABLE lecturers_table;
+END
+$$;
+/*Удаление всех cтрок в таблице преподавателей*/
+CREATE FUNCTION drop_all_data_lecturers_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	ALTER SEQUENCE lecturers_table_id_seq RESTART WITH 1;
+	DELETE FROM lecturers_table;
+
+END
+$$;
+/*Удаление cтроки в таблице преподавателей*/
+CREATE FUNCTION drop_data_lecturers_table(_lecturer_id_card text)
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	/*ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;*/
+	DELETE FROM lecturers_table WHERE lecturer_id_card = _lecturer_id_card;
+
+END
+$$;
+/*Добавление строк в таблице преподавателей*/
+CREATE FUNCTION add_lecturer(_last_name text, _first_name text, 
+							 _patronymic text,_lecturer_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select last_name, first_name, patronymic, lecturer_id_card 
+				From lecturers_table where last_name = _last_name AND 
+				first_name = _first_name AND patronymic = _patronymic AND 
+				lecturer_id_card = _lecturer_id_card)) THEN
+		RETURN 0; 		
+	ELSE
+		IF(Exists (Select lecturer_id_card From lecturers_table where 
+				lecturer_id_card = _lecturer_id_card)) THEN 
+			RETURN 1;
+		ELSE
+			INSERT INTO lecturers_table(last_name,first_name, patronymic,lecturer_id_card) 
+			VALUES (_last_name,_first_name, _patronymic,_lecturer_id_card);
+			RETURN 2;
+		END IF;
+	END IF;
+END
+$$;
+/*Изменение строки в таблице преподавателей*/
+CREATE FUNCTION edit_lecturer(old_lecturer_id_card text, new_last_name text,
+							new_first_name text, new_patronymic text,
+							new_lecturer_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select last_name, first_name, patronymic, lecturer_id_card 
+					From lecturers_table where last_name = new_last_name AND 
+					first_name = new_first_name AND patronymic = new_patronymic AND 
+					lecturer_id_card = new_lecturer_id_card )) THEN
+			RETURN 0; 		
+	ELSE
+		IF (old_lecturer_id_card != new_lecturer_id_card) THEN
+			IF(Exists (Select lecturer_id_card From lecturers_table where 
+					lecturer_id_card = new_lecturer_id_card)) THEN 
+				RETURN 1;
+			ELSE
+				UPDATE lecturers_table SET last_name = new_last_name,first_name = new_first_name, 
+				patronymic = new_patronymic, lecturer_id_card = new_lecturer_id_card
+				WHERE lecturer_id_card = old_lecturer_id_card;
+				RETURN 2;
+			END IF;
+		ELSE		
+			UPDATE lecturers_table SET last_name = new_last_name,first_name = new_first_name, 
+			patronymic = new_patronymic, lecturer_id_card = new_lecturer_id_card
+			WHERE lecturer_id_card = old_lecturer_id_card;
+			RETURN 2;
+		END IF;
+	END IF;
+END
+$$;
+
+
+
+
+
+
+
+
+
+/*Создание таблицы дисциплин*/
+CREATE TABLE disciplines_table (
+	id serial PRIMARY KEY,
+	discipline_name text
+);
+/*Удаление всех cтрок в таблице дисциплин*/
+CREATE FUNCTION drop_all_data_disciplines_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	ALTER SEQUENCE disciplines_table_id_seq RESTART WITH 1;
+	DELETE FROM disciplines_table;
+
+END
+$$;
+/*Удаление cтроки в таблице дисциплин*/
+CREATE FUNCTION drop_data_disciplines_table(_discipline_name text)
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	/*ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;*/
+	DELETE FROM disciplines_table WHERE discipline_name = _discipline_name;
+
+END
+$$;
+/*Добавление строк в таблице дисциплин*/
+CREATE FUNCTION add_discipline(_discipline_name text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select discipline_name From disciplines_table where discipline_name = _discipline_name)) THEN 
+		RETURN 0; 
+	ELSE 
+		INSERT INTO disciplines_table (discipline_name) VALUES (_discipline_name);
+		RETURN 1;
+	END IF;
+END
+$$;
+/*Изменение строки в таблице дисциплин*/
+CREATE FUNCTION edit_discipline(old_name text, new_name text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF (Exists (Select discipline_name From disciplines_table where discipline_name = new_name)) THEN 
+		RETURN 0; 
+	ELSE 
+		UPDATE disciplines_table SET discipline_name = new_name WHERE discipline_name = old_name;
+		RETURN 1;
+	END IF;
+END
+$$;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*Создание таблицы Успеваемости*/
+CREATE TABLE progress_table (
+	id serial PRIMARY KEY,
+	number_score int,
+	discipline_id int,
+	student_id int,
+	lecturer_id int,
+	score int,
+	date_score text,
+	FOREIGN KEY (discipline_id) REFERENCES disciplines_table (Id) ON DELETE RESTRICT,
+	FOREIGN KEY (student_id) REFERENCES students_table (Id) ON DELETE CASCADE,
+	FOREIGN KEY (lecturer_id) REFERENCES lecturers_table (Id) ON DELETE RESTRICT
+);
+/*Удаление таблицы Успеваемости*/
+CREATE FUNCTION drop_progress_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+   DROP TABLE progress_table;
+END
+$$;
+/*Удаление всех cтрок в таблице Успеваемости*/
+CREATE FUNCTION drop_all_data_progress_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	ALTER SEQUENCE progress_table_id_seq RESTART WITH 1;
+	DELETE FROM progress_table;
+
+END
+$$;
+/*Удаление cтроки в таблице Успеваемости*/
+CREATE FUNCTION drop_data_progress_table(_number_score int, _student_id_card text)
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	/*ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;*/
+	DELETE FROM progress_table WHERE number_score = _number_score 
+	AND student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card);
+
+END
+$$;
+/*Добавление строк в таблице Успеваемости*/
+CREATE FUNCTION add_progress(_number_score int,_date_score text, _score int,_discipline_name text, 
+							 _student_id_card text,_lecturer_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	INSERT INTO progress_table(number_score, date_score, score, discipline_id, student_id, lecturer_id) 
+	VALUES (_number_score,_date_score,_score, 
+	    (SELECT id FROM disciplines_table WHERE discipline_name = _discipline_name), 
+		(SELECT id FROM students_table WHERE studentIdCard = _student_id_card), 
+		(SELECT id FROM lecturers_table WHERE lecturer_id_card = _lecturer_id_card));
+	RETURN 1;
+
+END
+$$;
+/*Изменение строки в таблице Успеваемости*/
+CREATE FUNCTION edit_progress(_number_score int,_date_score text, _score int,_student_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF ((Select date_score From progress_table where number_score = _number_score AND 
+				student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card)) != _date_score or 
+		(Select score From progress_table where number_score = _number_score AND 
+				student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card)) != _score) THEN
+		UPDATE progress_table SET date_score = _date_score, score = _score WHERE number_score = _number_score AND 
+		student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card);
+		RETURN 1;
+	END IF;
+END
+$$;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*Создание таблицы Посещаемости*/
+CREATE TABLE attendances_table (
+	id serial PRIMARY KEY,
+	number_attendance int,
+	discipline_id int,
+	student_id int,
+	lecturer_id int,
+	attendance_flag text,
+	date_attendance text,
+	FOREIGN KEY (discipline_id) REFERENCES disciplines_table (Id) ON DELETE RESTRICT,
+	FOREIGN KEY (student_id) REFERENCES students_table (Id) ON DELETE CASCADE,
+	FOREIGN KEY (lecturer_id) REFERENCES lecturers_table (Id) ON DELETE RESTRICT
+);
+/*Удаление таблицы Посещаемости*/
+CREATE FUNCTION drop_attendances_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+   DROP TABLE attendances_table;
+END
+$$;
+/*Удаление всех cтрок в таблице Посещаемости*/
+CREATE FUNCTION drop_all_data_attendances_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	ALTER SEQUENCE attendances_table_id_seq RESTART WITH 1;
+	DELETE FROM attendances_table;
+
+END
+$$;
+/*Удаление cтроки в таблице Посещаемости*/
+CREATE FUNCTION drop_data_attendances_table(_number_attendance int, _student_id_card text)
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	/*ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;*/
+	DELETE FROM attendances_table WHERE number_attendance = _number_attendance 
+	AND student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card);
+
+END
+$$;
+/*Добавление строк в таблице Посещаемости*/
+CREATE FUNCTION add_attendances(_number_attendance int,_date_attendance text, attendance_flag text,_discipline_name text, 
+							 _student_id_card text,_lecturer_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	INSERT INTO attendances_table(number_attendance, date_attendance, attendance_flag, discipline_id, student_id, lecturer_id) 
+	VALUES (_number_attendance,_date_attendance,attendance_flag, 
+	    (SELECT id FROM disciplines_table WHERE discipline_name = _discipline_name), 
+		(SELECT id FROM students_table WHERE studentIdCard = _student_id_card), 
+		(SELECT id FROM lecturers_table WHERE lecturer_id_card = _lecturer_id_card));
+	RETURN 1;
+
+END
+$$;
+/*Изменение строки в таблице Посещаемости*/
+CREATE FUNCTION edit_attendances(_number_attendance int,_date_attendance text, _attendance_flag text,_student_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF ((Select date_attendance From attendances_table where number_attendance = _number_attendance AND 
+				student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card)) != _date_attendance or 
+		(Select attendance_flag From attendances_table where attendance_flag = _attendance_flag AND 
+				student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card)) != _attendance_flag) THEN
+		UPDATE attendances_table SET date_attendance = _date_attendance, attendance_flag = _attendance_flag WHERE number_attendance = _number_attendance AND 
+		student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card);
+		RETURN 1;
+	END IF;
+END
+$$;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*Создание таблицы Зачётов*/
+CREATE TABLE tests_table (
+	id serial PRIMARY KEY,
+	discipline_id int,
+	student_id int,
+	lecturer_id int,
+	test_flag text,
+	date_test text default null,
+	FOREIGN KEY (discipline_id) REFERENCES disciplines_table (Id) ON DELETE RESTRICT,
+	FOREIGN KEY (student_id) REFERENCES students_table (Id) ON DELETE CASCADE,
+	FOREIGN KEY (lecturer_id) REFERENCES lecturers_table (Id) ON DELETE RESTRICT
+);
+/*Удаление таблицы Зачётов*/
+CREATE FUNCTION drop_tests_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+   DROP TABLE tests_table;
+END
+$$;
+/*Удаление всех cтрок в таблице Зачётов*/
+CREATE FUNCTION drop_all_data_tests_table()
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	ALTER SEQUENCE tests_table_id_seq RESTART WITH 1;
+	DELETE FROM tests_table;
+
+END
+$$;
+/*Удаление cтроки в таблице Зачётов*/
+CREATE FUNCTION drop_data_tests_table(_discipline_name text, _student_id_card text)
+  RETURNS VOID
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	/*ALTER SEQUENCE groups_table_id_seq RESTART WITH 1;*/
+	DELETE FROM tests_table WHERE discipline_id = (SELECT id FROM disciplines_table WHERE discipline_name = _discipline_name) 
+	AND student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card);
+
+END
+$$;
+/*Добавление строк в таблице Зачётов*/
+CREATE FUNCTION add_tests(_date_test text, test_flag text,_discipline_name text, 
+							 _student_id_card text,_lecturer_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	INSERT INTO tests_table(date_test, test_flag, discipline_id, student_id, lecturer_id) 
+	VALUES (_date_test,test_flag, 
+	    (SELECT id FROM disciplines_table WHERE discipline_name = _discipline_name), 
+		(SELECT id FROM students_table WHERE studentIdCard = _student_id_card), 
+		(SELECT id FROM lecturers_table WHERE lecturer_id_card = _lecturer_id_card));
+	RETURN 1;
+
+END
+$$;
+/*Изменение строки в таблице Зачётов*/
+CREATE FUNCTION edit_tests(_number_test int,_date_test text, _test_flag text,_student_id_card text)
+  RETURNS int
+  LANGUAGE plpgsql AS
+$$
+BEGIN
+	IF ((Select date_test From tests_table where number_test = _number_test AND 
+				student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card)) != _date_test or 
+		(Select test_flag From tests_table where test_flag = _test_flag AND 
+				student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card)) != _test_flag) THEN
+		UPDATE tests_table SET date_test = _date_test, test_flag = _test_flag WHERE number_test = _number_test AND 
+		student_id = (SELECT id FROM students_table WHERE studentIdCard = _student_id_card);
+		RETURN 1;
+	END IF;
+END
+$$;
+/*Назначение зачётов*/
+CREATE PROCEDURE appoint_tests_procedure(_group_name text,_lecturer_id_card text, _date_test text, _discipline_name text)
+ LANGUAGE plpgsql
+ AS $$
+DECLARE
+		cur_students cursor for select id from students_table where group_id = (SELECT id FROM groups_table WHERE group_name = _group_name);
+		i record;
+BEGIN
+	loop
+		fetch cur_students into i;
+		exit when not found;
+			INSERT INTO tests_table(date_test, test_flag, discipline_id, student_id, lecturer_id) 
+			VALUES (_date_test,test_flag, 
+					(SELECT id FROM disciplines_table WHERE discipline_name = _discipline_name), 
+					i.studentIdCard, 
+					(SELECT id FROM lecturers_table WHERE lecturer_id_card = _lecturer_id_card));
+	end loop;
+END;
+$$;
+
+
+
+
+
+
+
+
+
+-- Создадим две роли (двух пользователей)
+CREATE ROLE root WITH PASSWORD '1';
+CREATE ROLE users WITH PASSWORD '1';
+-- Выдадим им разные права
+GRANT ALL ON TABLE public.groups_table TO root;
+GRANT SELECT ON TABLE public.groups_table TO users;
+GRANT ALL ON TABLE public.students_table TO root;
+GRANT SELECT ON TABLE public.students_table TO users;
+
+GRANT ALL ON TABLE public.disciplines_table TO root;
+GRANT SELECT ON TABLE public.disciplines_table TO users;
+
+GRANT ALL ON TABLE public.lecturers_table TO root;
+GRANT SELECT ON TABLE public.lecturers_table TO users;
+
+GRANT ALL ON TABLE public.progress_table TO root;
+GRANT SELECT ON TABLE public.progress_table TO users;
+
+GRANT ALL ON TABLE public.attendances_table TO root;
+GRANT SELECT ON TABLE public.attendances_table TO users;
+
+GRANT ALL ON TABLE public.tests_table TO root;
+GRANT SELECT ON TABLE public.tests_table TO users;
+
